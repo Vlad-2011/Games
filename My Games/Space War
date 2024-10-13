@@ -1,0 +1,116 @@
+import pygame
+import sys
+import random
+
+space_ship = pygame.image.load("Space Ship.png")
+
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+FPS = 60
+PLAYER_SPEED = 5
+PROJECTILE_SPEED = -10
+INVADER_SPEED = 1
+
+pygame.init()
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Invaders")
+clock = pygame.time.Clock()
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+
+game_state = "play"
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.transform.scale(space_ship, (100, 100))
+        # self.image = pygame.Surface((50, 30))
+        # self.image.fill(GREEN)
+        self.rect = self.image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+        self.speed = PLAYER_SPEED
+
+    def update(self):
+        mouse_x, _ = pygame.mouse.get_pos()
+        self.rect.centerx = mouse_x
+
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
+
+    def shoot(self):
+        projectile = Projectile(self.rect.centerx, self.rect.top)
+        all_sprites.add(projectile)
+        projectiles.add(projectile)
+
+
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((5, 10))
+        self.image.fill(WHITE)
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self):
+        self.rect.move_ip(0, PROJECTILE_SPEED)
+        if self.rect.bottom < 0:
+            self.kill()
+
+
+class Invader(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((40, 30))
+        self.image.fill(WHITE)
+        self.rect = self.image.get_rect(topleft=(x, y))
+
+    def update(self):
+        self.rect.move_ip(0, INVADER_SPEED)
+        if self.rect.top > SCREEN_HEIGHT:
+            self.kill()
+
+
+def spawn_invaders():
+    for i in range(5):
+        invader = Invader(random.randint(0, SCREEN_WIDTH - 40), random.randint(-100, -40))
+        all_sprites.add(invader)
+        invaders.add(invader)
+
+
+all_sprites = pygame.sprite.Group()
+projectiles = pygame.sprite.Group()
+invaders = pygame.sprite.Group()
+
+player = Player()
+all_sprites.add(player)
+
+spawn_invaders()
+
+while game_state == "play":
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            is_shooting = True
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                player.shoot()
+
+    all_sprites.update()
+
+    for projectile in projectiles:
+        hits = pygame.sprite.spritecollide(projectile, invaders, True)
+        if hits:
+            projectile.kill()
+
+    screen.fill(BLACK)
+    all_sprites.draw(screen)
+
+    if len(invaders) < 10:
+        spawn_invaders()
+
+    pygame.display.flip()
+    clock.tick(FPS)
