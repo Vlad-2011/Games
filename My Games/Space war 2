@@ -1,0 +1,136 @@
+import pygame
+import sys
+import random
+import math
+
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+FPS = 60
+PLAYER_SPEED = 5
+PROJECTILE_SPEED = -10
+INVADER_SPEED = 1
+
+pygame.init()
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Invaders")
+clock = pygame.time.Clock()
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+
+game_state = "play"
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.Surface((50, 30))
+        self.image.fill(GREEN)
+        self.rect = self.image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
+        self.speed = PLAYER_SPEED
+        self.shoot_angle = 90
+
+    def update(self):
+        mouse_x, _ = pygame.mouse.get_pos()
+        self.rect.centerx = mouse_x
+
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
+
+    def shoot(self):
+        projectile = Projectile(self.rect.centerx, self.rect.top, self.shoot_angle)
+        all_sprites.add(projectile)
+        projectiles.add(projectile)
+
+
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y, angle=90):
+        super().__init__()
+        proj_snape = random.choice(((5, 10), (5, 10)))
+        self.image = pygame.Surface(proj_snape)
+        self.image.fill(WHITE)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.angle = angle
+
+    def update(self):
+        self.rect.move_ip(PROJECTILE_SPEED * math.cos(self.angle), PROJECTILE_SPEED * math.sin(self.angle))
+        if self.rect.bottom < 0:
+            self.kill()
+
+
+class Invader(pygame.sprite.Sprite):
+    def __init__(self, x, y, hp=5):
+        super().__init__()
+        self.image = pygame.Surface((40, 30))
+        self.image.fill((255-hp*20, hp*5+50, hp*20))
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.hp = hp
+
+    def update(self):
+        self.rect.move_ip(0, INVADER_SPEED)
+        self.image.fill((255 - self.hp * 20, self.hp * 5 + 50, self.hp * 20))
+        if self.rect.top > SCREEN_HEIGHT:
+            self.kill()
+
+
+def spawn_invaders():
+    for i in range(10, 200, 40):
+        # invader = Invader(random.randint(0, SCREEN_WIDTH - 40), random.randint(-100, -40))
+        invader = Invader(random.randint(0, SCREEN_WIDTH - 40), random.randint(-100, -40), random.randint(1, 10))
+        all_sprites.add(invader)
+        invaders.add(invader)
+
+
+all_sprites = pygame.sprite.Group()
+projectiles = pygame.sprite.Group()
+invaders = pygame.sprite.Group()
+
+player = Player()
+all_sprites.add(player)
+
+spawn_invaders()
+
+is_shooting = False
+
+while game_state == "play":
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                is_shooting = True
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                is_shooting = False
+    if is_shooting:
+        player.shoot()
+    all_sprites.update()
+
+    new_wave_threshold = 5
+
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        player.shoot_angle -= 0.05
+    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        player.shoot_angle += 0.05
+
+
+    for invader in invaders:
+        hits = pygame.sprite.spritecollide(invader, projectiles, True)
+        if hits:
+            invader.hp -= 1
+            if invader.hp <= 0:
+                invader.kill()
+
+    screen.fill(BLACK)
+    all_sprites.draw(screen)
+
+    if len(invaders) < new_wave_threshold:
+        new_wave_threshold += 10
+        spawn_invaders()
+
+    pygame.display.flip()
+    clock.tick(FPS)
+
