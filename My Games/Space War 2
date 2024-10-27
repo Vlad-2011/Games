@@ -2,6 +2,9 @@ import pygame
 import sys
 import random
 import math
+import pickle
+
+destroyed_invaders = 0
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 FPS = 60
@@ -13,6 +16,9 @@ pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Invaders")
 clock = pygame.time.Clock()
+
+# Создание шрифта
+font = pygame.font.Font(None, 36)
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -94,6 +100,8 @@ spawn_invaders()
 
 is_shooting = False
 
+new_wave_threshold = 1
+
 while game_state == "play":
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -103,19 +111,33 @@ while game_state == "play":
                 is_shooting = True
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 is_shooting = False
+
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_q]: #сохранение
+        file = open('important', 'wb')
+        data = (player.shoot_angle, [x.rect for x in invaders])
+        pickle.dump(data, file)
+        print(data)
+    if keys[pygame.K_r]: #загрузка
+        file = open('important', 'rb')
+        data = pickle.load(file)
+        # player.shoot_angle = pickle.load(file)
+        for invader in invaders:
+            invader.kill()
+        for i in range(len(data[1])):
+            invader = Invader(data[1][i][0], data[1][i][1], random.randint(1, 2))
+            all_sprites.add(invader)
+            invaders.add(invader)
+
     if is_shooting:
         player.shoot()
     all_sprites.update()
-
-    new_wave_threshold = 5
-
-    keys = pygame.key.get_pressed()
 
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         player.shoot_angle -= 0.05
     if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
         player.shoot_angle += 0.05
-
 
     for invader in invaders:
         hits = pygame.sprite.spritecollide(invader, projectiles, True)
@@ -123,12 +145,17 @@ while game_state == "play":
             invader.hp -= 1
             if invader.hp <= 0:
                 invader.kill()
+                destroyed_invaders += 1
 
     screen.fill(BLACK)
     all_sprites.draw(screen)
+    # Текст для вывода
+    text = font.render(f'Destroyed Invaders: {destroyed_invaders}', True, (255, 255, 255))
+    screen.blit(text, (50, 50))
 
     if len(invaders) < new_wave_threshold:
-        new_wave_threshold += 10
+        new_wave_threshold += 1
+        print(new_wave_threshold)
         spawn_invaders()
 
     pygame.display.flip()
