@@ -1,0 +1,265 @@
+import pygame
+import sys
+import math
+import random
+
+pygame.init()
+
+screen_width = 640
+screen_height = 480
+screen = pygame.display.set_mode((screen_width, screen_height))
+pygame.display.set_caption("Battle City Clone")
+clock = pygame.time.Clock()
+
+class Tank(pygame.sprite.Sprite):
+    def __init__(self, x, y, color, direction):
+        super().__init__()
+        self.image = pygame.Surface((32, 32))
+        self.image.fill(color)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.direction = direction
+
+    def update(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP]:
+            self.rect.y -= 2
+            if self.rect.top < 0:
+                self.rect.top = 0
+        if keys[pygame.K_DOWN]:
+            self.rect.y += 2
+            if self.rect.bottom > screen_height:
+                self.rect.bottom = screen_height
+        if keys[pygame.K_LEFT]:
+            self.rect.x -= 2
+            if self.rect.left < 0:
+                self.rect.left = 0
+        if keys[pygame.K_RIGHT]:
+            self.rect.x += 2
+            if self.rect.right > screen_width:
+                self.rect.right = screen_width
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+class Tank2(Tank):
+    def update(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_w]:
+            self.rect.y -= 2
+            if self.rect.top < 0:
+                self.rect.top = 0
+        if keys[pygame.K_s]:
+            self.rect.y += 2
+            if self.rect.bottom > screen_height:
+                self.rect.bottom = screen_height
+        if keys[pygame.K_a]:
+            self.rect.x -= 2
+            if self.rect.left < 0:
+                self.rect.left = 0
+        if keys[pygame.K_d]:
+            self.rect.x += 2
+            if self.rect.right > screen_width:
+                self.rect.right = screen_width
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction):
+        super().__init__()
+        self.image = pygame.Surface((4, 4))
+        self.image.fill((255, 255, 255))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.direction = direction
+        self.speed = 5
+
+    def update(self):
+        if self.direction == 'up':
+            self.rect.y -= self.speed
+            if self.rect.top < 0:
+                self.kill()
+        if self.direction == 'down':
+            self.rect.y += self.speed
+            if self.rect.bottom > screen_height:
+                self.kill()
+        if self.direction == 'left':
+            self.rect.x -= self.speed
+            if self.rect.left < 0:
+                self.kill()
+        if self.direction == 'right':
+            self.rect.x += self.speed
+            if self.rect.right > screen_width:
+                self.kill()
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((32, 32))
+        self.health = random.randint(1, 5)
+        self.update_color()
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.speed = 2
+
+    def update_color(self):
+        if self.health == 1:
+            self.image.fill((255, 0, 0))  # Red for low health
+        elif self.health == 2:
+            self.image.fill((255, 128, 0))  # Orange for medium-low health
+        elif self.health == 3:
+            self.image.fill((255, 255, 0))  # Yellow for medium health
+        elif self.health == 4:
+            self.image.fill((0, 255, 0))  # Green for medium-high health
+        else:
+            self.image.fill((0, 0, 255))  # Blue for high health
+
+    def take_damage(self):
+        self.health -= 1
+        if self.health <= 0:
+            self.kill()
+        self.update_color()
+
+    def move_towards_player(self, players):
+        closest_player = min(players, key=lambda player: math.hypot(player.rect.x - self.rect.x, player.rect.y - self.rect.y))
+        dx = closest_player.rect.x - self.rect.x
+        dy = closest_player.rect.y - self.rect.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            dx /= dist
+            dy /= dist
+            self.rect.x += dx * self.speed
+            self.rect.y += dy * self.speed
+            if self.rect.left < 0:
+                self.rect.left = 0
+            if self.rect.right > screen_width:
+                self.rect.right = screen_width
+            if self.rect.top < 0:
+                self.rect.top = 0
+            if self.rect.bottom > screen_height:
+                self.rect.bottom = screen_height
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+def spawn_enemy():
+    x = random.randint(0, screen_width - 32)
+    y = random.randint(0, screen_height - 32)
+    return Enemy(x, y)
+
+class Explosion(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((32, 32))
+        self.image.fill((255, 255, 0))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.frame = 0
+
+    def update(self):
+        self.frame += 0.1
+        if self.frame > 3:
+            self.kill()
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+tank = Tank(100, 100, (255, 0, 0), 'up')
+tank2 = Tank2(300, 300, (255, 0, 0), 'up')
+bullets = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
+explosions = pygame.sprite.Group()
+
+# Initial enemy spawn
+wave_size = 10
+wave_count = 0
+enemy_spawn_timer = 0
+
+score = 0
+start_time = pygame.time.get_ticks()
+
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_UP]:
+                    direction = 'up'
+                elif keys[pygame.K_DOWN]:
+                    direction = 'down'
+                elif keys[pygame.K_LEFT]:
+                    direction = 'left'
+                elif keys[pygame.K_RIGHT]:
+                    direction = 'right'
+                else:
+                    direction = 'up'  # Default direction if no arrow key is pressed
+                bullet = Bullet(tank.rect.centerx, tank.rect.centery, direction)
+                bullets.add(bullet)
+
+            if event.key == pygame.K_f: # Assuming 'f' key for tank2
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_w]:
+                    direction = 'up'
+                elif keys[pygame.K_s]:
+                    direction = 'down'
+                elif keys[pygame.K_a]:
+                    direction = 'left'
+                elif keys[pygame.K_d]:
+                    direction = 'right'
+                else:
+                    direction = 'up'  # Default direction if no arrow key is pressed
+                bullet = Bullet(tank2.rect.centerx, tank2.rect.centery, direction)
+                bullets.add(bullet)
+
+    screen.fill((0, 0, 0))
+    tank.update()
+    tank2.update()
+    tank.draw(screen)
+    tank2.draw(screen)
+
+    # Spawn enemies in waves
+    enemy_spawn_timer += 1
+    if enemy_spawn_timer > 60 and len(enemies) < wave_size:
+        enemies.add(spawn_enemy())
+        enemy_spawn_timer = 0
+    if len(enemies) == 0 and wave_count < wave_size:
+        wave_count += 1
+        wave_size += 5
+
+    bullets.update()
+    for bullet in bullets:
+        bullet.draw(screen)
+        if not screen.get_rect().contains(bullet.rect):
+            bullets.remove(bullet)
+        for enemy in enemies:
+            if enemy.rect.colliderect(bullet.rect):
+                enemy.take_damage()
+                bullets.remove(bullet)
+                if enemy not in enemies:
+                    explosions.add(Explosion(enemy.rect.centerx, enemy.rect.centery))
+                    score += 1
+
+    enemies.update()
+    for enemy in enemies:
+        enemy.move_towards_player([tank, tank2])
+        enemy.draw(screen)
+        if enemy.rect.colliderect(tank.rect) or enemy.rect.colliderect(tank2.rect):
+            print("Game Over")
+            pygame.quit()
+            sys.exit()
+
+    explosions.update()
+    explosions.draw(screen)
+
+    # Display score and time
+    font = pygame.font.Font(None, 36)
+    score_text = font.render(f"Score: {score}", True, (255, 255, 255))
+    time_text = font.render(f"Time: {int((pygame.time.get_ticks() - start_time) / 1000)} seconds", True, (255, 255, 255))
+    screen.blit(score_text, (10, 10))
+    screen.blit(time_text, (10, 50))
+
+    pygame.display.flip()
+    clock.tick(60)
