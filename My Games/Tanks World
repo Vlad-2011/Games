@@ -5,11 +5,16 @@ import random
 
 pygame.init()
 
-screen_width = 640
-screen_height = 480
+# Initialize screen and clock
+screen_width = 2160
+screen_height = 1180
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Battle City Clone")
 clock = pygame.time.Clock()
+
+# Load sound effects
+# shoot_sound = pygame.mixer.Sound('shoot.wav')
+# explosion_sound = pygame.mixer.Sound('explosion.wav')
 
 class Tank(pygame.sprite.Sprite):
     def __init__(self, x, y, color, direction):
@@ -18,23 +23,25 @@ class Tank(pygame.sprite.Sprite):
         self.image.fill(color)
         self.rect = self.image.get_rect(center=(x, y))
         self.direction = direction
+        self.speed = 2
+        self.invincible = False
 
     def update(self):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_UP]:
-            self.rect.y -= 2
+            self.rect.y -= self.speed
             if self.rect.top < 0:
                 self.rect.top = 0
         if keys[pygame.K_DOWN]:
-            self.rect.y += 2
+            self.rect.y += self.speed
             if self.rect.bottom > screen_height:
                 self.rect.bottom = screen_height
         if keys[pygame.K_LEFT]:
-            self.rect.x -= 2
+            self.rect.x -= self.speed
             if self.rect.left < 0:
                 self.rect.left = 0
         if keys[pygame.K_RIGHT]:
-            self.rect.x += 2
+            self.rect.x += self.speed
             if self.rect.right > screen_width:
                 self.rect.right = screen_width
 
@@ -45,19 +52,19 @@ class Tank2(Tank):
     def update(self):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_w]:
-            self.rect.y -= 2
+            self.rect.y -= self.speed
             if self.rect.top < 0:
                 self.rect.top = 0
         if keys[pygame.K_s]:
-            self.rect.y += 2
+            self.rect.y += self.speed
             if self.rect.bottom > screen_height:
                 self.rect.bottom = screen_height
         if keys[pygame.K_a]:
-            self.rect.x -= 2
+            self.rect.x -= self.speed
             if self.rect.left < 0:
                 self.rect.left = 0
         if keys[pygame.K_d]:
-            self.rect.x += 2
+            self.rect.x += self.speed
             if self.rect.right > screen_width:
                 self.rect.right = screen_width
 
@@ -101,7 +108,7 @@ class Enemy(pygame.sprite.Sprite):
         self.health = random.randint(1, 5)
         self.update_color()
         self.rect = self.image.get_rect(topleft=(x, y))
-        self.speed = 2
+        self.speed = 1
 
     def update_color(self):
         if self.health == 1:
@@ -143,11 +150,6 @@ class Enemy(pygame.sprite.Sprite):
     def draw(self, screen):
         screen.blit(self.image, self.rect)
 
-def spawn_enemy():
-    x = random.randint(0, screen_width - 32)
-    y = random.randint(0, screen_height - 32)
-    return Enemy(x, y)
-
 class Explosion(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
@@ -164,11 +166,33 @@ class Explosion(pygame.sprite.Sprite):
     def draw(self, screen):
         screen.blit(self.image, self.rect)
 
+class PowerUp(pygame.sprite.Sprite):
+    def __init__(self, x, y, type):
+        super().__init__()
+        self.image = pygame.Surface((16, 16))
+        self.image.fill((255, 255, 0))  # Yellow for power-up
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.type = type
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+def spawn_enemy():
+    x = random.randint(0, screen_width - 32)
+    y = random.randint(0, screen_height - 32)
+    return Enemy(x, y)
+
+def spawn_power_up():
+    x = random.randint(0, screen_width - 16)
+    y = random.randint(0, screen_height - 16)
+    return PowerUp(x, y, random.choice(['speed', 'invincibility']))
+
 tank = Tank(100, 100, (255, 0, 0), 'up')
 tank2 = Tank2(300, 300, (255, 0, 0), 'up')
 bullets = pygame.sprite.Group()
 enemies = pygame.sprite.Group()
 explosions = pygame.sprite.Group()
+power_ups = pygame.sprite.Group()
 
 # Initial enemy spawn
 wave_size = 10
@@ -186,21 +210,6 @@ while True:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 keys = pygame.key.get_pressed()
-                if keys[pygame.K_UP]:
-                    direction = 'up'
-                elif keys[pygame.K_DOWN]:
-                    direction = 'down'
-                elif keys[pygame.K_LEFT]:
-                    direction = 'left'
-                elif keys[pygame.K_RIGHT]:
-                    direction = 'right'
-                else:
-                    direction = 'up'  # Default direction if no arrow key is pressed
-                bullet = Bullet(tank.rect.centerx, tank.rect.centery, direction)
-                bullets.add(bullet)
-
-            if event.key == pygame.K_f: # Assuming 'f' key for tank2
-                keys = pygame.key.get_pressed()
                 if keys[pygame.K_w]:
                     direction = 'up'
                 elif keys[pygame.K_s]:
@@ -213,6 +222,23 @@ while True:
                     direction = 'up'  # Default direction if no arrow key is pressed
                 bullet = Bullet(tank2.rect.centerx, tank2.rect.centery, direction)
                 bullets.add(bullet)
+                # shoot_sound.play()
+
+            if event.key == pygame.K_m: # Assuming 'f' key for tank2
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_UP]:
+                    direction = 'up'
+                elif keys[pygame.K_DOWN]:
+                    direction = 'down'
+                elif keys[pygame.K_LEFT]:
+                    direction = 'left'
+                elif keys[pygame.K_RIGHT]:
+                    direction = 'right'
+                else:
+                    direction = 'up'  # Default direction if no arrow key is pressed
+                bullet = Bullet(tank.rect.centerx, tank.rect.centery, direction)
+                bullets.add(bullet)
+                # shoot_sound.play()
 
     screen.fill((0, 0, 0))
     tank.update()
@@ -241,15 +267,30 @@ while True:
                 if enemy not in enemies:
                     explosions.add(Explosion(enemy.rect.centerx, enemy.rect.centery))
                     score += 1
+                    # explosion_sound.play()
 
     enemies.update()
     for enemy in enemies:
         enemy.move_towards_player([tank, tank2])
         enemy.draw(screen)
         if enemy.rect.colliderect(tank.rect) or enemy.rect.colliderect(tank2.rect):
-            print("Game Over")
-            pygame.quit()
-            sys.exit()
+            if not tank.invincible and not tank2.invincible:
+                print("Game Over")
+                game_over_screen()
+
+    power_ups.update()
+    for power_up in power_ups:
+        power_up.draw(screen)
+        if power_up.rect.colliderect(tank.rect) or power_up.rect.colliderect(tank2.rect):
+            if power_up.type == 'speed':
+                tank.speed = 4
+                tank2.speed = 4
+                pygame.time.set_timer(pygame.USEREVENT, 5000)  # Reset speed after 5 seconds
+            elif power_up.type == 'invincibility':
+                tank.invincible = True
+                tank2.invincible = True
+                pygame.time.set_timer(pygame.USEREVENT, 5000)  # Reset invincibility after 5 seconds
+            power_ups.remove(power_up)
 
     explosions.update()
     explosions.draw(screen)
