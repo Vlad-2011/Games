@@ -19,8 +19,8 @@ explosion_sound = pygame.mixer.Sound('explosion.mp3')
 class Tank(pygame.sprite.Sprite):
     def __init__(self, x, y, color, direction):
         super().__init__()
-        self.original_image = pygame.image.load('tank.png').convert_alpha()
-        self.original_image = pygame.transform.scale(self.original_image, (100, 100))
+        self.original_image = pygame.image.load('tank 1.png').convert_alpha()
+        self.original_image = pygame.transform.scale(self.original_image, (50, 70))
         self.image = self.original_image
         self.rect = self.image.get_rect(center=(screen_width/2, screen_height/2))
         self.direction = direction
@@ -105,10 +105,31 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         self.image = pygame.Surface((32, 32))
-        self.health = random.randint(1, 5)
-        self.update_color()
+        self.health = random.randint(1, 6)
         self.rect = self.image.get_rect(topleft=(x, y))
         self.speed = 1
+        if wave_count %2 == 0 and random.randint(1, 10) > 8 and wave_count > 0:
+            self.health = 10
+        global wave_size
+        if wave_count == 10:
+            wave_size = 1
+            self.health = 50
+            self.image = pygame.Surface((75, 75))
+        if wave_count == 25:
+            wave_size = 1
+            self.health = 75
+            self.image = pygame.Surface((85, 85))
+        if wave_count == 50:
+            wave_size = 1
+            self.health = 100
+            self.image = pygame.Surface((100, 100))
+        if wave_count == 100:
+            wave_size = 1
+            self.health = 200
+            self.image = pygame.Surface((120, 120))
+        else:
+            wave_size = wave_count+5
+        self.update_color()
 
     def update_color(self):
         if self.health == 1:
@@ -119,8 +140,16 @@ class Enemy(pygame.sprite.Sprite):
             self.image.fill((255, 255, 0))  # Yellow for medium health
         elif self.health == 4:
             self.image.fill((0, 255, 0))  # Green for medium-high health
+        elif self.health == 5:
+            self.image.fill((0, 0, 255)) # Blue for high health
+        elif self.health == 6:
+            self.image.fill((128, 0, 128)) # Purple for very high health
+        elif self.health < 11:
+            self.image = pygame.Surface((50, 50))
+            self.image.fill((255, 255, 255)) # White for boss health
         else:
-            self.image.fill((0, 0, 255))  # Blue for high health
+            self.image.fill((255, 255, 255))
+        self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
 
     def take_damage(self):
         self.health -= 1
@@ -134,18 +163,47 @@ class Enemy(pygame.sprite.Sprite):
         dy = closest_player.rect.y - self.rect.y
         dist = math.hypot(dx, dy)
         if dist > 0:
-            dx /= dist
-            dy /= dist
-            self.rect.x += dx * self.speed
-            self.rect.y += dy * self.speed
-            if self.rect.left < 0:
-                self.rect.left = 0
-            if self.rect.right > screen_width:
-                self.rect.right = screen_width
-            if self.rect.top < 0:
-                self.rect.top = 0
-            if self.rect.bottom > screen_height:
-                self.rect.bottom = screen_height
+            if self.health > 2:
+                dx /= dist
+                dy /= dist
+                self.rect.x += dx * self.speed
+                self.rect.y += dy * self.speed
+                if self.rect.left < 0:
+                    self.rect.left = 0
+                if self.rect.right > screen_width:
+                    self.rect.right = screen_width
+                if self.rect.top < 0:
+                    self.rect.top = 0
+                if self.rect.bottom > screen_height:
+                    self.rect.bottom = screen_height
+            if self.health == 2:
+                self.speed = 2
+                dx /= dist
+                dy /= dist
+                self.rect.x += dx * self.speed
+                self.rect.y += dy * self.speed
+                if self.rect.left < 0:
+                    self.rect.left = 0
+                if self.rect.right > screen_width:
+                    self.rect.right = screen_width
+                if self.rect.top < 0:
+                    self.rect.top = 0
+                if self.rect.bottom > screen_height:
+                    self.rect.bottom = screen_height
+            if self.health == 1:
+                self.speed = 3
+                dx /= dist
+                dy /= dist
+                self.rect.x += dx * self.speed
+                self.rect.y += dy * self.speed
+                if self.rect.left < 0:
+                    self.rect.left = 0
+                if self.rect.right > screen_width:
+                    self.rect.right = screen_width
+                if self.rect.top < 0:
+                    self.rect.top = 0
+                if self.rect.bottom > screen_height:
+                    self.rect.bottom = screen_height
 
     def draw(self, screen):
         screen.blit(self.image, self.rect)
@@ -176,6 +234,22 @@ class PowerUp(pygame.sprite.Sprite):
 
     def draw(self, screen):
         screen.blit(self.image, self.rect)
+
+class Button(pygame.sprite.Sprite):
+    def __init__(self, text, x=0, y=0, width=50, height=20, colour = (0, 200, 0), hover_colour = (50, 100, 50)):
+        super().__init__()
+        self.text = text
+        self.image = pygame.Surface((width, height))
+        self.rect = self.image.get_rect(topleft = (x, y))
+        self.colour = colour
+        self.hovered = False
+        self.font = pygame,font.Font(None, 24)
+
+    def update(self):
+        mouse_pos = pygame.mouse.get_pos()
+        self.hovered = self.rect.collidepoint(mouse_pos)
+
+
 
 def spawn_enemy():
     # Choose a random border
@@ -208,7 +282,7 @@ explosions = pygame.sprite.Group()
 power_ups = pygame.sprite.Group()
 
 # Initial enemy spawn settings
-wave_size = 10
+wave_size = 5
 wave_count = 0
 enemy_spawn_timer = 0
 enemies_spawned = 0
@@ -222,9 +296,17 @@ game_over = False
 
 game_state = 'play'
 
+direction = 'up'
+
 while True:
     if game_state == 'menu':
-        pass
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    game_state = 'play'
     if game_state == 'play':
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -236,17 +318,7 @@ while True:
 
                 elif event.key == pygame.K_SPACE:
                     keys = pygame.key.get_pressed()
-                    if keys[pygame.K_w]:
-                        direction = 'up'
-                    elif keys[pygame.K_s]:
-                        direction = 'down'
-                    elif keys[pygame.K_a]:
-                        direction = 'left'
-                    elif keys[pygame.K_d]:
-                        direction = 'right'
-                    else:
-                        direction = 'up'  # Default direction if no arrow key is pressed
-                    bullet = Bullet(tank.rect.centerx, tank.rect.centery, direction)
+                    bullet = Bullet(tank.rect.centerx, tank.rect.centery, tank.direction)
                     bullets.add(bullet)
                     shoot_sound.play()
 
@@ -265,7 +337,7 @@ while True:
             # Check if all enemies in the current wave are cleared
             if len(enemies) == 0 and enemies_spawned >= wave_size:
                 wave_count += 1
-                wave_size += 5  # Increase wave size for the next wave
+                wave_size += 1  # Increase wave size for the next wave
                 enemies_spawned = 0  # Reset the counter for the next wave
 
             bullets.update()
