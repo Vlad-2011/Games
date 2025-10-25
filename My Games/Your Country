@@ -1,0 +1,172 @@
+import random
+import time
+
+class State:
+    def __init__(self):
+        self.territory = 1000           
+        self.population = 5000          
+        self.gold = 1000                
+        self.stability = 100.0          
+        self.army = 1000                
+        self.factories = 5              
+        self.income = 0                 
+        self.factory_base_price = 100   
+        self.recent_war = False         
+        self.territory_needed_per_person = 0.1  
+
+    def update_income(self):
+        # Доход зависит от территории, заводов и населения, уменьшается на размер армии
+        base_income = self.territory * 0.2 + self.factories * 50 + self.population * 0.1
+        army_penalty = self.army * 0.5
+        self.income = int(base_income - army_penalty)
+        
+    def factory_price(self):
+        return int(self.factory_base_price * (1.1 ** self.factories))
+
+    def buy_factory(self):
+        price = self.factory_price()
+        if self.gold >= price:
+            self.gold -= price
+            self.factories += 1
+            print(f"Завод куплен за {price} золота.")
+        else:
+            print(f"Недостаточно золота для покупки завода. Требуется {price} золота.")
+
+    def army_price(self):
+        return 10
+
+    def population_needed_per_soldier(self):
+        return 5
+
+    def buy_army(self, amount):
+        gold_price = self.army_price() * amount
+        population_required = self.population_needed_per_soldier() * amount
+        if self.gold >= gold_price and self.population >= population_required:
+            self.gold -= gold_price
+            self.population -= population_required
+            self.army += amount
+            print(f"Вы наняли {amount} солдат за {gold_price} золота, потеряв {population_required} населения.")
+        elif self.gold < gold_price and self.population < population_required:
+            print(f"Недостаточно золота и населения. Требуется {gold_price} золота и {population_required} населения.")
+        elif self.gold < gold_price:
+            print(f"Недостаточно золота. Требуется {gold_price}, у вас {self.gold}.")
+        else:
+            print(f"Недостаточно населения. Требуется {population_required}, у вас {self.population}.")
+
+    def update_stability(self):
+        territory_needed = self.population * self.territory_needed_per_person
+        if self.territory < territory_needed:
+            self.stability -= 5
+            print("Недостаточно территории для населения! Стабильность падает.")
+        else:
+            if self.stability < 100:
+                self.stability += 2
+
+        if self.recent_war:
+            self.stability -= 10
+            self.recent_war = False
+
+        self.stability = max(0, min(100, self.stability))
+
+        if self.stability < 30:
+            chance = (30 - self.stability) / 30
+            if random.random() < chance:
+                lost_territory = int(self.territory * 0.1)
+                lost_population = int(self.population * 0.1)
+                self.territory = max(0, self.territory - lost_territory)
+                self.population = max(0, self.population - lost_population)
+                print(f"Из-за низкой стабильности потеряно {lost_territory} территории и {lost_population} населения!")
+
+    def population_growth(self):
+        growth_rate = 0.02 if self.stability > 70 else 0.005 if self.stability > 40 else 0.0
+        growth = int(self.population * growth_rate)
+        self.population += growth
+
+    def declare_war(self):
+        enemy_army = random.randint(500, 1500)
+        enemy_territory = random.randint(300, 1000)
+        enemy_population = random.randint(2000, 6000)
+
+        print(f"Объявлена война! Враг имеет армию {enemy_army}, территорию {enemy_territory} и население {enemy_population}.")
+
+        if self.army > enemy_army:
+            print("Вы победили в войне!")
+            self.army = max(0, self.army - enemy_army)
+            gained_territory = enemy_territory // 2
+            gained_population = enemy_population // 2
+            self.territory += gained_territory
+            self.population += gained_population
+            print(f"Вы потеряли {enemy_army} солдат в бою.")
+            print(f"Вы захватили {gained_territory} территории и {gained_population} населения.")
+            self.recent_war = True
+        else:
+            print("Вы проиграли войну.")
+            lost_territory = self.territory // 2
+            lost_population = self.population // 2
+            lost_army = int(self.army * 0.9)
+            self.territory = max(0, self.territory - lost_territory)
+            self.population = max(0, self.population - lost_population)
+            self.army = max(0, self.army - lost_army)
+            self.stability -= 15
+            self.stability = max(0, self.stability)
+            print(f"Потеряно территории: {lost_territory}, населения: {lost_population}, армии: {lost_army}.")
+            if self.territory == 0 or self.population == 0:
+                print("У вас не осталось территории или населения. Вы проиграли игру.")
+                exit()
+
+    def show_status(self):
+        print("\nТекущее состояние государства:")
+        print(f"Территория: {self.territory} км²")
+        print(f"Население: {self.population}")
+        print(f"Золото: {self.gold}")
+        print(f"Стабильность: {self.stability:.1f}")
+        print(f"Армия: {self.army}")
+        print(f"Заводы: {self.factories}")
+        print(f"Доход: {self.income}")
+        print(f"Цена следующего завода: {self.factory_price()}\n")
+
+def main():
+    state = State()
+
+    while True:
+        state.update_income()
+        state.update_stability()
+        state.population_growth()
+
+        state.gold += state.income
+        state.show_status()
+
+        print("Выберите действие:")
+        print("1. Купить завод")
+        print("2. Нанять армию")
+        print("3. Объявить войну")
+        print("4. Показать статус")
+        print("5. Выйти из игры")
+
+        choice = input("Введите номер действия: ")
+
+        if choice == "1":
+            state.buy_factory()
+        elif choice == "2":
+            try:
+                amount = int(input("Сколько солдат нанять? "))
+                if amount > 0:
+                    state.buy_army(amount)
+                else:
+                    print("Введите число больше 0.")
+            except ValueError:
+                print("Пожалуйста, введите число.")
+        elif choice == "3":
+            state.declare_war()
+        elif choice == "4":
+            state.show_status()
+        elif choice == "5":
+            print("Выход из игры.")
+            break
+        else:
+            print("Некорректный ввод. Попробуйте снова.")
+
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
