@@ -1,0 +1,82 @@
+#include <stdio.h>
+
+#define SIZE 3
+
+void initBoard(char board[SIZE][SIZE]) {
+    for (int i = 0; i < SIZE; i++)
+        for (int j = 0; j < SIZE; j++)
+            board[i][j] = ' ';
+}
+
+void printBoard(char board[SIZE][SIZE]) {
+    printf("\n");
+    for (int i = 0; i < SIZE; i++) {
+        printf(" %c | %c | %c \n", board[i][0], board[i][1], board[i][2]);
+        if (i != SIZE - 1) printf("---|---|---\n");
+    }
+    printf("\n");
+}
+
+int isWin(char board[SIZE][SIZE], char player) {
+    for (int i = 0; i < SIZE; i++) {
+        // Проверка строк и столбцов
+        if ((board[i][0] == player && board[i][1] == player && board[i][2] == player) ||
+            (board[0][i] == player && board[1][i] == player && board[2][i] == player))
+            return 1;
+    }
+    // Проверка диагоналей
+    if ((board[0][0] == player && board[1][1] == player && board[2][2] == player) ||
+        (board[0][2] == player && board[1][1] == player && board[2][0] == player))
+        return 1;
+    return 0;
+}
+
+int isDraw(char board[SIZE][SIZE]) {
+    for (int i = 0; i < SIZE; i++)
+        for (int j = 0; j < SIZE; j++)
+            if (board[i][j] == ' ')
+                return 0;
+    return 1;
+}
+
+int main() {
+    char board[SIZE][SIZE];
+    initBoard(board);
+
+    char player = 'X';
+    int row, col;
+    int game_over = 0;
+
+    printf("Игра Крестики-нолики\n");
+
+    while (!game_over) {
+        printBoard(board);
+        printf("Игрок %c, введите строку и столбец (0, 1 или 2 через пробел): ", player);
+        scanf("%d %d", &row, &col);
+
+        if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) {
+            printf("Некорректный ввод. Попробуйте снова.\n");
+            continue;
+        }
+        if (board[row][col] != ' ') {
+            printf("Эта клетка уже занята. Попробуйте снова.\n");
+            continue;
+        }
+
+        board[row][col] = player;
+
+        if (isWin(board, player)) {
+            printBoard(board);
+            printf("Игрок %c победил!\n", player);
+            game_over = 1;
+        } else if (isDraw(board)) {
+            printBoard(board);
+            printf("Ничья!\n");
+            game_over = 1;
+        } else {
+            player = (player == 'X') ? 'O' : 'X';
+        }
+    }
+
+    return 0;
+}
