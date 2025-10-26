@@ -1,0 +1,523 @@
+import random
+
+COLORS = ['белый', 'зелёный', 'фиолетовый', 'голубой', 'красный', 'жëлтый']
+MIN_TOWERS = 2
+MAX_TOWERS = 6
+MAX_HEALTH = 10
+MAX_SHEL = 5
+
+GOAL_TYPES = ['destroy_others', 'find_allies', 'help_ally', 'hate_target', 'build_relation', 'neutral']
+
+class Tower:
+    def __init__(self, name, color, is_player=False):
+        self.name = name
+        self.color = color
+        self.health = 4
+        self.shells = 1
+        self.is_player = is_player
+        self.relations = {}
+        self.active = True
+        self.stats = {'successful_attacks': 0, 'failed_attacks': 0}
+        self.goal = None
+        self.goal_timer = 0
+        self.goal_target_name = None
+
+    def is_alive(self):
+        return self.health > 0 and self.active
+
+    def adjust_relations(self, other_name, delta, towers=None):
+        old = self.relations.get(other_name, 0)
+        new_value = max(-100, min(100, old + delta))
+        self.relations[other_name] = new_value
+        if towers:
+            other = next((t for t in towers if t.name == other_name), None)
+            if other:
+                other.relations[self.name] = new_value
+
+    def get_power(self):
+        return self.health + self.shells
+
+    def record_attack_result(self, successful):
+        if successful:
+            self.stats['successful_attacks'] += 1
+        else:
+            self.stats['failed_attacks'] += 1
+
+    def get_aggression(self):
+        base = 0.5
+        diff = self.stats['successful_attacks'] - self.stats['failed_attacks']
+        return max(0.1, min(1.0, base + 0.05 * diff))
+
+    def __str__(self):
+        role = "Игрок" if self.is_player else self.name
+        return f"{role} ({self.color}) H:{self.health} S:{self.shells}"
+
+    def set_random_goal(self, towers):
+        self.goal = random.choice(GOAL_TYPES)
+        self.goal_timer = random.randint(5, 10)
+        self.goal_target_name = None
+        others = [t for t in towers if t != self and t.is_alive()]
+        if self.goal in ['help_ally', 'hate_target'] and others:
+            target = random.choice(others)
+            self.goal_target_name = target.name
+
+def find_available_color(towers):
+    used = {t.color for t in towers if t.is_alive() and t.active}
+    for color in COLORS:
+        if color not in used:
+            return color
+    return None
+
+def create_new_tower(parent, towers):
+    if parent.health <= 2:
+        print(f"{parent} слишком ослаблен, чтобы создать новую башню.")
+        return None
+    color = find_available_color(towers)
+    if color is None:
+        print(f"{parent} нет свободных цветов для создания новой башни.")
+        return None
+    count_bots = len([t for t in towers if not t.is_player and t.is_alive()])
+    new_name = f"Бот{count_bots + 1}"
+    while any(t.name == new_name for t in towers):
+        count_bots += 1
+        new_name = f"Бот{count_bots + 1}"
+    new_tower = Tower(name=new_name, color=color)
+    new_tower.set_random_goal(towers + [new_tower])
+    new_tower.health = 2
+    new_tower.shells = 1
+    new_tower.relations = {}
+    for t in towers + [new_tower]:
+        if t != new_tower:
+            new_tower.relations[t.name] = 0
+            t.relations[new_tower.name] = 0
+    new_tower.relations[parent.name] = 100
+    parent.relations[new_tower.name] = 100
+    parent.health -= 2
+    print(f"{parent} создал новую башню {new_tower} и отделил 2 здоровья.")
+    towers.append(new_tower)
+    return new_tower
+
+def input_tower_count():
+    while True:
+        try:
+            n = int(input(f"Введите количество башен ({MIN_TOWERS}-{MAX_TOWERS}): "))
+            if MIN_TOWERS <= n <= MAX_TOWERS:
+                return n
+            else:
+                print(f"Число должно быть от {MIN_TOWERS} до {MAX_TOWERS}.")
+        except ValueError:
+            print("Введите корректное число.")
+
+def input_player_color(available_colors):
+    print("Доступные цвета башен:")
+    for i, color in enumerate(available_colors, 1):
+        print(f"{i}. {color}")
+    while True:
+        c = input("Выберите цвет для вашей башни (введите номер или название): ").strip().lower()
+        if c.isdigit():
+            num = int(c)
+            if 1 <= num <= len(available_colors):
+                return available_colors[num - 1]
+            else:
+                print("Неверный номер.")
+        else:
+            if c in available_colors:
+                return c
+            else:
+                print("Недопустимый цвет. Попробуйте снова.")
+
+def initialize_towers(count, player_color):
+    remaining_colors = COLORS.copy()
+    remaining_colors.remove(player_color)
+    towers = []
+    player_tower = Tower(name="Игрок", color=player_color, is_player=True)
+    towers.append(player_tower)
+    for i in range(1, count):
+        col = random.choice(remaining_colors)
+        remaining_colors.remove(col)
+        towers.append(Tower(name=f"Бот{i}", color=col))
+    for t in towers:
+        t.relations = {}
+        for ot in towers:
+            if ot != t:
+                t.relations[ot.name] = 0
+    for t in towers:
+        t.set_random_goal(towers)
+    return towers
+
+def print_status(towers):
+    print("\nТекущий статус башен:")
+    for t in towers:
+        if t.is_alive():
+            print(f" {t}")
+    print()
+
+def print_relations(towers):
+    print("\nТекущие отношения между башнями (от -100 до 100):")
+    header = " " * 15 + "".join(f"{t.color[:6]:>8}" for t in towers if t.is_alive())
+    print(header)
+    for t in towers:
+        if not t.is_alive():
+            continue
+        row = f"{t.color[:6]:<15}"
+        for ot in towers:
+            if not ot.is_alive():
+                continue
+            if ot == t:
+                row += f"{'--':>8}"
+            else:
+                val = t.relations.get(ot.name, 0)
+                row += f"{val:>8}"
+        print(row)
+    print("\nОтрицательные отношения (<0) — вражда, башни пытаются навредить друг другу.")
+    print("Положительные отношения (>0) — поддержка и помощь.")
+    print("100 — крепкий союз и взаимопомощь в войнах.\n")
+
+def choose_target(subject, targets, exclude_dead=True):
+    alive_targets = [t for t in targets if (not exclude_dead or t.is_alive()) and t != subject]
+    if not alive_targets:
+        return None
+    if subject.is_player:
+        print("Выберите цель из:")
+        for i, t in enumerate(alive_targets, 1):
+            print(f" {i}. {t}")
+        while True:
+            try:
+                ch = int(input("Номер цели: "))
+                if 1 <= ch <= len(alive_targets):
+                    return alive_targets[ch-1]
+                else:
+                    print("Неправильный номер.")
+            except ValueError:
+                print("Введите число.")
+    else:
+        weights = []
+        for t in alive_targets:
+            rel = subject.relations.get(t.name, 0)
+            w = -rel
+            if subject.get_power() < t.get_power():
+                w -= 10
+            if rel > 60:
+                w -= 15
+            weights.append(w)
+        choice = alive_targets[weights.index(max(weights))]
+        return choice
+
+def action_increase_health(tower):
+    if tower.health < MAX_HEALTH:
+        tower.health += 1
+        print(f"{tower} увеличил здоровье на 1 (текущее {tower.health}).")
+    else:
+        print(f"{tower} уже имеет максимальное здоровье.")
+
+def action_produce_shell(tower):
+    if tower.shells < MAX_SHEL:
+        tower.shells += 1
+        print(f"{tower} произвёл 1 снаряд (текущее {tower.shells}).")
+    else:
+        print(f"{tower} достиг максимума снарядов.")
+
+def action_attack(attacker, defender):
+    if attacker.shells <= 0:
+        print(f"{attacker} не может атаковать — нет снарядов.")
+        return
+    attacker.shells -= 1
+    damage = 2
+    defender.health -= damage
+    attacker.adjust_relations(defender.name, -20, towers)
+    defender.adjust_relations(attacker.name, -20, towers)
+    success = defender.health <= 0
+    attacker.record_attack_result(success)
+    print(f"{attacker} атаковал {defender}, (-{damage} здоровье у {defender}, -1 снаряд у {attacker}).")
+    if success:
+        print(f"{defender} разрушена!")
+
+def action_transfer_shell(from_tower, to_tower):
+    if from_tower.shells <= 0:
+        print(f"{from_tower} не может передать снаряд — их нет.")
+        return
+    from_tower.shells -= 1
+    to_tower.shells += 1
+    from_tower.adjust_relations(to_tower.name, +10, towers)
+    to_tower.adjust_relations(from_tower.name, +10, towers)
+    print(f"{from_tower} передал 1 снаряд {to_tower}, отношения улучшились.")
+
+def action_offer_attack(from_tower, to_tower, target):
+    print(f"{from_tower} получил предложение от {to_tower} атаковать {target}.")
+    if from_tower.relations.get(to_tower.name, 0) < 60:
+        print(f"{from_tower} отказался — отношения с {to_tower} слишком низки.")
+        from_tower.adjust_relations(to_tower.name, -10, towers)
+        return False
+    if from_tower.get_power() < target.get_power():
+        print(f"{from_tower} отказался — не уверен в победе над {target}.")
+        from_tower.adjust_relations(to_tower.name, -5, towers)
+        return False
+    print(f"{from_tower} согласился атаковать {target} по предложению {to_tower}.")
+    action_attack(from_tower, target)
+    from_tower.adjust_relations(to_tower.name, 10, towers)
+    return True
+
+def action_merge_and_out(source, target):
+    print(f"{source} передаёт свои ресурсы ({source.health} здоровья и {source.shells} снарядов) {target}. {source} покидает игру как союзник.")
+    target.health += source.health
+    target.shells += source.shells
+    if target.health > MAX_HEALTH:
+        target.health = MAX_HEALTH
+    if target.shells > MAX_SHEL:
+        target.shells = MAX_SHEL
+    source.active = False
+    for name, rel in source.relations.items():
+        if rel > 0:
+            target.adjust_relations(name, 20, towers)
+
+def choose_bot_action(tower, towers):
+    tower.goal_timer -= 1
+    if tower.goal_timer <= 0:
+        tower.set_random_goal(towers)
+
+    alive_others = [t for t in towers if t.is_alive() and t != tower]
+    good_allies = [t for t in alive_others if tower.relations.get(t.name, 0) >= 60]
+    aggression = tower.get_aggression()
+    enemies = [t for t in alive_others if tower.shells > 0 and (tower.relations.get(t.name, 0) < 0 or (tower.relations.get(t.name, 0) >= 0 and random.random() < aggression))]
+
+    if tower.health == MAX_HEALTH and tower.shells == MAX_SHEL and not enemies:
+        if find_available_color(towers) is not None:
+            return ('create_tower', None)
+    if tower.goal in ['find_allies', 'help_ally']:
+        if not good_allies and find_available_color(towers) is not None and tower.health > 5:
+            return ('create_tower', None)
+
+    if tower.goal == 'destroy_others':
+        if tower.shells > 0 and enemies:
+            victim = min(enemies, key=lambda x: x.health)
+            return ('attack', victim)
+
+    elif tower.goal == 'find_allies':
+        if good_allies and tower.shells > 0:
+            ally = random.choice(good_allies)
+            if enemies and random.random() < 0.3:
+                victim = min(enemies, key=lambda x: x.health)
+                return ('attack', victim)
+            return ('transfer_shell', ally)
+        elif tower.health < MAX_HEALTH:
+            return ('increase_health', None)
+        elif tower.shells < MAX_SHEL:
+            return ('produce_shells', None)
+
+    elif tower.goal == 'help_ally':
+        ally = next((t for t in towers if t.name == tower.goal_target_name and t.is_alive()), None)
+        if ally and tower.relations.get(ally.name, 0) > 0:
+            if tower.shells > 0 and ally.is_alive():
+                enemy_targets = [t for t in alive_others if t != ally and tower.relations.get(t.name, 0) < 0 and t.is_alive()]
+                if enemy_targets:
+                    target = min(enemy_targets, key=lambda x: x.health)
+                    return ('attack', target)
+                return ('transfer_shell', ally)
+            elif tower.health < MAX_HEALTH:
+                return ('increase_health', None)
+            else:
+                return ('produce_shells', None)
+
+    elif tower.goal == 'hate_target':
+        target = next((t for t in towers if t.name == tower.goal_target_name and t.is_alive()), None)
+        if target and tower.shells > 0:
+            return ('attack', target)
+        else:
+            tower.set_random_goal(towers)
+            return ('produce_shells', None)
+
+    elif tower.goal == 'build_relation':
+        if tower.shells > 0 and good_allies:
+            ally = random.choice(good_allies)
+            return ('transfer_shell', ally)
+        if tower.health < MAX_HEALTH:
+            return ('increase_health', None)
+        if tower.shells < MAX_SHEL:
+            return ('produce_shells', None)
+
+    elif tower.goal == 'neutral':
+        if tower.health < MAX_HEALTH:
+            return ('increase_health', None)
+        if tower.shells < MAX_SHEL:
+            return ('produce_shells', None)
+        return (random.choice(['produce_shells', 'increase_health']), None)
+
+    if tower.health <= 2 and good_allies:
+        best = max(good_allies, key=lambda t: tower.relations.get(t.name, 0))
+        return ('merge_and_out', best)
+
+    if (tower.health <= 3 or enemies) and enemies:
+        victim = min(enemies, key=lambda x: x.health)
+        return ('attack', victim)
+
+    if good_allies and tower.shells > 0:
+        ally = random.choice(good_allies)
+        return ('transfer_shell', ally)
+
+    if tower.health < 4:
+        return ('increase_health', None)
+    if tower.shells < 2:
+        return ('produce_shells', None)
+    return ('produce_shells', None)
+
+def player_turn(player, towers):
+    print_status(towers)
+    print(f"Ваш ход ({player}). Доступные действия:")
+    print("1. Увеличить здоровье на 1")
+    print("2. Атаковать башню")
+    print("3. Произвести 1 снаряд")
+    print("4. Передать снаряд другой башне")
+    print("5. Предложить атаковать другую башню")
+    print("6. Слиться с союзником (отдать здоровье и снаряды, выйти из игры)")
+    print("7. Создать новую башню (отделить 2 здоровья, доступен цвет)")
+    while True:
+        cmd = input("Введите номер действия: ").strip()
+        if cmd == '1':
+            action_increase_health(player)
+            break
+        elif cmd == '2':
+            if player.shells <= 0:
+                print("Нет снарядов для атаки.")
+                continue
+            target = choose_target(player, towers)
+            if target:
+                action_attack(player, target)
+                break
+            else:
+                print("Нет доступных целей для атаки.")
+        elif cmd == '3':
+            action_produce_shell(player)
+            break
+        elif cmd == '4':
+            if player.shells <= 0:
+                print("Нет снарядов для передачи.")
+                continue
+            targets = [t for t in towers if t != player and t.is_alive()]
+            print("Выберите, кому передать снаряд:")
+            for i, t in enumerate(targets, 1):
+                print(f"{i}. {t}")
+            try:
+                choice = int(input("Номер башни: "))
+                if 1 <= choice <= len(targets):
+                    action_transfer_shell(player, targets[choice-1])
+                    break
+                else:
+                    print("Неверная команда.")
+            except ValueError:
+                print("Введите число.")
+        elif cmd == '5':
+            alive_towers = [t for t in towers if t.is_alive() and t != player]
+            if not alive_towers:
+                print("Нет башен для предложения.")
+                continue
+            print("Выберите башню для предложения атаки:")
+            for i, t in enumerate(alive_towers, 1):
+                print(f"{i}. {t}")
+            try:
+                choice = int(input("Номер башни: "))
+                if 1 <= choice <= len(alive_towers):
+                    ally = alive_towers[choice-1]
+                else:
+                    print("Неверная команда.")
+                    continue
+            except ValueError:
+                print("Введите число.")
+                continue
+            target = choose_target(player, towers)
+            if target:
+                accepted = action_offer_attack(ally, player, target)
+                if accepted:
+                    break
+                else:
+                    print(f"{ally.name} отказалась выполнять атаку.")
+                    break
+            else:
+                print("Нет цели для атаки.")
+        elif cmd == '6':
+            allies = [t for t in towers if t != player and player.relations.get(t.name, 0) >= 60 and t.is_alive()]
+            if not allies:
+                print("Нет подходящих союзников для слияния.")
+                continue
+            print("Выберите союзника, которому передать всё и покинуть игру:")
+            for i, t in enumerate(allies, 1):
+                print(f"{i}. {t}")
+            try:
+                choice = int(input("Номер башни: "))
+                if 1 <= choice <= len(allies):
+                    action_merge_and_out(player, allies[choice - 1])
+                    break
+                else:
+                    print("Неверная команда.")
+            except ValueError:
+                print("Введите число.")
+        elif cmd == '7':
+            if player.health > 5 and find_available_color(towers) is not None:
+                create_new_tower(player, towers)
+                break
+            else:
+                print("Недостаточно здоровья или нет свободных цветов.")
+        else:
+            print("Неверная команда.")
+
+def bots_turn(towers):
+    for tower in towers:
+        if not tower.is_alive() or (tower.is_player and not tower.active):
+            continue
+        if tower.is_player:
+            continue
+        action, param = choose_bot_action(tower, towers)
+        if action == 'increase_health':
+            action_increase_health(tower)
+        elif action == 'produce_shells':
+            action_produce_shell(tower)
+        elif action == 'attack' and param:
+            if tower.shells > 0 and param.is_alive():
+                action_attack(tower, param)
+        elif action == 'transfer_shell' and param:
+            if tower.shells > 0 and param.is_alive():
+                action_transfer_shell(tower, param)
+        elif action == 'offer_attack' and param:
+            ally, target = param
+            if ally.is_alive() and target.is_alive():
+                action_offer_attack(ally, tower, target)
+        elif action == 'merge_and_out' and param:
+            if param.is_alive():
+                action_merge_and_out(tower, param)
+        elif action == 'create_tower':
+            create_new_tower(tower, towers)
+
+def check_winner(towers):
+    alive = [t for t in towers if t.is_alive()]
+    if len(alive) == 1:
+        return alive[0]
+    return None
+
+def main():
+    global towers
+    print("=== Игра: Сражение башен ===")
+    count = input_tower_count()
+    player_color = input_player_color(COLORS)
+    towers = initialize_towers(count, player_color)
+
+    turn = 0
+    player_alive = True
+    while True:
+        turn += 1
+        print(f"\n--- Ход {turn} ---")
+        player = next(t for t in towers if t.is_player)
+        if player.is_alive() and player.active:
+            player_turn(player, towers)
+        else:
+            if player_alive:
+                print("Ваша башня разрушена или ушла. Теперь вы наблюдаете за игрой до конца.")
+                player_alive = False
+        bots_turn(towers)
+        print_status(towers)
+        print_relations(towers)
+        winner = check_winner(towers)
+        if winner:
+            print(f"\nПобедила башня: {winner.name} ({winner.color})! Поздравляем!")
+            break
+
+if __name__ == "__main__":
+    main()
