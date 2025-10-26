@@ -1,0 +1,358 @@
+import random
+import time
+import sys
+
+class State:
+    def __init__(self, name, territory, population, gold, stability, army, factories, direction, religion):
+        self.name = name
+        self.territory = territory
+        self.population = population
+        self.gold = gold
+        self.stability = stability
+        self.army = army
+        self.factories = factories
+        self.income = 0
+        self.factory_base_price = 100
+        self.recent_war = False
+        self.territory_needed_per_person = 0.1
+        self.direction = direction
+        self.is_active = True
+        self.religion = religion
+
+    def update_income(self):
+        base_income = self.territory * 0.2 + self.factories * 50 + self.population * 0.1
+        army_penalty = self.army * 0.5
+        self.income = int(base_income - army_penalty)
+
+    def factory_price(self):
+        return int(self.factory_base_price * (1.1 ** self.factories))
+
+    def buy_factory(self):
+        price = self.factory_price()
+        if self.gold >= price:
+            self.gold -= price
+            self.factories += 1
+            print(f"[{self.name}] Завод куплен за {price} золота.")
+        else:
+            print(f"[{self.name}] Недостаточно золота для покупки завода. Требуется {price} золота.")
+
+    def army_price(self):
+        return 10
+
+    def population_needed_per_soldier(self):
+        return 5
+
+    def buy_army(self, amount):
+        gold_price = self.army_price() * amount
+        population_required = self.population_needed_per_soldier() * amount
+        if self.gold >= gold_price and self.population >= population_required:
+            self.gold -= gold_price
+            self.population -= population_required
+            self.army += amount
+            print(f"[{self.name}] Вы наняли {amount} солдат за {gold_price} золота, потеряв {population_required} населения.")
+        elif self.gold < gold_price and self.population < population_required:
+            print(f"[{self.name}] Недостаточно золота и населения. Требуется {gold_price} золота и {population_required} населения.")
+        elif self.gold < gold_price:
+            print(f"[{self.name}] Недостаточно золота. Требуется {gold_price}, у вас {self.gold}.")
+        else:
+            print(f"[{self.name}] Недостаточно населения. Требуется {population_required}, у вас {self.population}.")
+
+    def update_stability(self):
+        territory_needed = self.population * self.territory_needed_per_person
+        if self.territory < territory_needed:
+            self.stability -= 5
+            print(f"[{self.name}] Недостаточно территории для населения! Стабильность падает.")
+        else:
+            if self.stability < 100:
+                self.stability += 2
+
+        if self.recent_war:
+            self.stability -= 10
+            self.recent_war = False
+
+        self.stability = max(0, min(100, self.stability))
+
+        if self.stability < 30:
+            chance = (30 - self.stability) / 30
+            if random.random() < chance:
+                lost_territory = int(self.territory * 0.1)
+                lost_population = int(self.population * 0.1)
+                self.territory = max(0, self.territory - lost_territory)
+                self.population = max(0, self.population - lost_population)
+                print(f"[{self.name}] Из-за низкой стабильности потеряно {lost_territory} территории и {lost_population} населения!")
+                return lost_territory, lost_population
+        return 0,0
+
+    def population_growth(self):
+        growth_rate = 0.02 if self.stability > 70 else 0.005 if self.stability > 40 else 0.0
+        growth = int(self.population * growth_rate)
+        self.population += growth
+
+    def declare_war(self, enemy):
+        enemy_army = enemy.army
+        enemy_territory = enemy.territory
+        enemy_population = enemy.population
+
+        print(f"[{self.name}] объявляет войну {enemy.name}! Враг имеет армию {enemy_army}, территорию {enemy_territory} и население {enemy_population}.")
+
+        if self.army > enemy_army:
+            print(f"[{self.name}] победил в войне!")
+            self.army = max(0, self.army - enemy_army)
+            possible_capture = self.army // 10
+            actual_capture = min(possible_capture, enemy.territory)
+            enemy.territory -= actual_capture
+            self.territory += actual_capture
+
+            population_captured = int(enemy.population * (actual_capture / (enemy.territory + actual_capture) if (enemy.territory + actual_capture) > 0 else 0))
+            enemy.population -= population_captured
+            self.population += population_captured
+
+            print(f"[{self.name}] захватил {actual_capture} территории и {population_captured} населения у {enemy.name}.")
+
+            if enemy.territory == 0 or enemy.population == 0:
+                print(f"{enemy.name} выбывает из игры.")
+                enemy.is_active = False
+
+            self.recent_war = True
+        else:
+            print(f"[{self.name}] проиграл войну против {enemy.name}.")
+            lost_territory = enemy.territory // 2
+            lost_population = enemy.population // 2
+            lost_army = int(self.army * 0.9)
+            self.territory = max(0, self.territory - lost_territory)
+            self.population = max(0, self.population - lost_population)
+            self.army = max(0, self.army - lost_army)
+            self.stability -= 15
+            self.stability = max(0, self.stability)
+            print(f"Потеряно территории: {lost_territory}, населения: {lost_population}, армии: {lost_army}.")
+            if self.territory == 0 or self.population == 0:
+                print(f"[{self.name}] У вас не осталось территории или населения. Вы проиграли игру.")
+                self.is_active = False
+
+    def send_gold(self, receiver, amount):
+        if self.gold >= amount:
+            self.gold -= amount
+            receiver.gold += amount
+            print(f"[{self.name}] отправил {amount} золота {receiver.name}.")
+        else:
+            print(f"[{self.name}] недостаточно золота для отправки.")
+
+def generate_country_name():
+    names = ["Аркания", "Белтерра", "Ксанадо", "Дариен", "Элизия", "Фалкон", "Гелиос", "Нексус", "Орландо", "Паладия"]
+    return random.choice(names)
+
+def update_relations_for_name_change(relations, old_name, new_name):
+    keys_to_update = []
+    to_add = []
+    for (n1, n2) in list(relations.keys()):
+        if n1 == old_name or n2 == old_name:
+            val = relations[(n1, n2)]
+            keys_to_update.append((n1, n2))
+            new_n1 = new_name if n1 == old_name else n1
+            new_n2 = new_name if n2 == old_name else n2
+            to_add.append(((new_n1, new_n2), val))
+    for key in keys_to_update:
+        del relations[key]
+    for key, val in to_add:
+        relations[key] = val
+
+def main():
+    directions = ['Захват территорий', 'Улучшение экономики', 'Хорошие отношения', 'Нейтралитет']
+    religions = ["Христианство", "Ислам", "Буддизм", "Синтоизм"]
+    print("Добро пожаловать в игру управления государствами!")
+    num_states = int(input("Введите количество государств: "))
+    max_territories = int(input("Введите максимальное количество территорий: "))
+    base_territory = max_territories // num_states
+
+    states = []
+    for i in range(num_states):
+        name = generate_country_name()
+        population = random.randint(3000, 7000)
+        gold = random.randint(500, 1500)
+        stability = 100.0
+        army = random.randint(800, 1200)
+        factories = random.randint(3, 7)
+        direction = random.choice(directions)
+        religion = random.choice(religions)
+        state = State(name, base_territory, population, gold, stability, army, factories, direction, religion)
+        states.append(state)
+
+    relations = {}
+    for s1 in states:
+        for s2 in states:
+            if s1 != s2:
+                relations[(s1.name, s2.name)] = random.randint(-100, 100)
+    
+    player = states[0]
+    print(f"Вы управляете государством: {player.name}, направление: {player.direction}, религия: {player.religion}")
+
+    while True:
+        # Перед ходом: религии и направления — корректировка отношений за религию
+        for s1 in states:
+            if not s1.is_active: continue
+            for s2 in states:
+                if s1 != s2 and s2.is_active:
+                    key = (s1.name, s2.name)
+                    if s1.religion == s2.religion:
+                        relations[key] = min(100, relations.get(key, 0) + 3)
+                    else:
+                        relations[key] = max(-100, relations.get(key, 0) - 1)
+        # Случайная смена направления (но не чаще 1 раза за 4 хода)
+        if random.randint(1, 4) == 1:
+            state = random.choice([s for s in states if s.is_active])
+            old_dir = state.direction
+            state.direction = random.choice(directions)
+            print(f"[Изменено направление] {state.name} теперь: {state.direction} (было: {old_dir})")
+        # Ход каждой страны
+        for state in states:
+            if not state.is_active:
+                continue
+            state.update_income()
+            lost_territory, lost_population = state.update_stability()
+            if lost_territory > 0 or lost_population > 0:
+                new_name = generate_country_name()
+                new_religion = state.religion
+                new_state = State(new_name, lost_territory, lost_population, 100, 50, 300, 2, random.choice(directions), new_religion)
+                print(f"Восстание! Создано новое государство {new_name} ({new_religion}) из {state.name}")
+                states.append(new_state)
+                # Записать отношения для нового
+                for s in states:
+                    if s != new_state:
+                        relations[(new_state.name, s.name)] = random.randint(-100, 100)
+                        relations[(s.name, new_state.name)] = random.randint(-100, 100)
+            state.population_growth()
+            state.gold += state.income
+
+        # AI-деятельность
+        for state in states:
+            if not state.is_active or state == player:
+                continue
+            # Переброс направления "Улучшение экономики"
+            if state.direction == 'Улучшение экономики':
+                # Построить завод, если доход ниже нуля и есть золото
+                if state.income < 0 and state.factories > 0:
+                    continue
+                elif state.gold > state.factory_price():
+                    state.buy_factory()
+                # Избегает войн
+                continue
+            elif state.direction == 'Захват территорий':
+                targets = [s for s in states if s != state and s.is_active and relations.get((state.name, s.name), 0) < 0]
+                if targets:
+                    target = random.choice(targets)
+                    state.declare_war(target)
+            elif state.direction == 'Хорошие отношения':
+                for other in states:
+                    if other != state and other.is_active:
+                        current_rel = relations.get((state.name, other.name), 0)
+                        relations[(state.name, other.name)] = min(100, current_rel + 2)
+                        if relations[(state.name, other.name)] > 80:
+                            if state.gold > 100:
+                                state.send_gold(other, 50)
+                            for enemy in states:
+                                if enemy != state and enemy != other and enemy.is_active:
+                                    if relations.get((other.name, enemy.name), 0) < -50 and relations.get((state.name, enemy.name), 0) < -50:
+                                        state.declare_war(enemy)
+            # Нейтралитет — почти ничего не делает
+
+        if not player.is_active:
+            print("Вы проиграли. Игра окончена.")
+            break
+
+        print(f"\nВаше государство: {player.name} (Направление: {player.direction}, Религия: {player.religion})")
+        print("1. Купить завод")
+        print("2. Нанять армию")
+        print("3. Объявить войну")
+        print("4. Посмотреть статус")
+        print("5. Изменить название")
+        print("6. Отправить золото")
+        print("7. Список государств")
+        print("8. Сменить религию")
+        print("9. Выйти")
+
+        choice = input("Введите номер действия: ")
+
+        if choice == "1":
+            player.buy_factory()
+        elif choice == "2":
+            try:
+                amount = int(input("Сколько солдат нанять? "))
+                if amount > 0:
+                    player.buy_army(amount)
+                else:
+                    print("Введите число больше 0.")
+            except ValueError:
+                print("Пожалуйста, введите число.")
+        elif choice == "3":
+            print("Выберите государство для войны:")
+            available = [s for s in states if s != player and s.is_active]
+            for idx, s in enumerate(available):
+                print(f"{idx}. {s.name} (Территория: {s.territory}, Армия: {s.army})")
+            try:
+                sel = int(input("Введите номер страны: "))
+                if 0 <= sel < len(available):
+                    player.declare_war(available[sel])
+                else:
+                    print("Некорректный выбор.")
+            except ValueError:
+                print("Введите число.")
+        elif choice == "4":
+            print(f"Государство {player.name} — Территория: {player.territory}, Население: {player.population}, Армия: {player.army}, Заводы: {player.factories}, Доход: {player.income}, Золото: {player.gold}, Стабильность: {player.stability}, Направление: {player.direction}, Религия: {player.religion}")
+        elif choice == "5":
+            new_name = input("Введите новое название для вашего государства: ")
+            old_name = player.name
+            player.name = new_name
+            update_relations_for_name_change(relations, old_name, new_name)
+            print(f"Название изменено на {new_name}")
+        elif choice == "6":
+            print("Выберите государство для отправки золота:")
+            available = [s for s in states if s != player and s.is_active]
+            for idx, s in enumerate(available):
+                print(f"{idx}. {s.name} (Золото: {s.gold})")
+            try:
+                sel = int(input("Введите номер страны: "))
+                if 0 <= sel < len(available):
+                    amount = int(input("Введите сумму золота для отправки: "))
+                    if amount > 0:
+                        player.send_gold(available[sel], amount)
+                    else:
+                        print("Введите положительное число.")
+                else:
+                    print("Некорректный выбор.")
+            except ValueError:
+                print("Введите число.")
+        elif choice == "7":
+            print("Список государств:")
+            for s in states:
+                if not s.is_active:
+                    continue
+                rel_player = relations.get((s.name, player.name), 0) if s != player else "Ваше государство"
+                rels_others = []
+                for other in states:
+                    if other != s and other.is_active:
+                        rel = relations.get((s.name, other.name), 0)
+                        rels_others.append(f"{other.name}: {rel}")
+                print(
+                    f"{s.name} | Терр: {s.territory}, Нас: {s.population}, Напр: {s.direction}, Религия: {s.religion}\n"
+                    f"  Отношения с игроком: {rel_player}\n"
+                    f"  Отношения с другими: {', '.join(rels_others)}"
+                )
+        elif choice == "8":
+            print(f"Текущая религия: {player.religion}")
+            print("Возможные религии:", ", ".join(religions))
+            new_rel = input("Введите новое название религии для страны: ")
+            if new_rel in religions:
+                player.religion = new_rel
+                print("Религия изменена.")
+            else:
+                print("Некорректный выбор религии.")
+        elif choice == "9":
+            print("Выход из игры.")
+            break
+        else:
+            print("Некорректный ввод. Попробуйте снова.")
+
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
